@@ -6,7 +6,7 @@ import java.util.List;
 
 @Entity
 @Table(name = "sudokumain")
-public class Value{
+public class Value implements Comparable<Value>{
     @Id
     @Column(name = "id")
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -51,5 +51,9 @@ public class Value{
     }
 
 
+    @Override
+    public int compareTo(Value o) {
+        return this.getId()-o.getId();
+    }
 }
 

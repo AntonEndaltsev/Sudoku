@@ -6,7 +6,7 @@ import java.util.List;
 
 @Entity
 @Table(name = "sudokumain")
-public class Value implements Comparable<Value>{
+public class Value implements Comparable<Value>, Cloneable{
     @Id
     @Column(name = "id")
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -54,6 +54,11 @@ public class Value implements Comparable<Value>{
     @Override
     public int compareTo(Value o) {
         return this.getId()-o.getId();
+    }
+
+    @Override
+    public Object clone() throws CloneNotSupportedException {
+        return super.clone();
     }
 }
 

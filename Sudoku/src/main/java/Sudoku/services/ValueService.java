@@ -11,10 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.io.BufferedReader;
 import java.io.FileReader;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 
 
 @Service
@@ -105,7 +102,19 @@ public class ValueService {
         //основные вычисления через рекурсию
         calculate();
 
-        return "Вы удачно загрузили корректный файл";
+        List<Value> allValues = this.findAll();
+        Collections.sort(allValues);
+        int counter1 = 0;
+        for (Value v:allValues) {
+            System.out.print(v.getValue());
+            counter1++;
+            if (counter1==Math.sqrt(allValues.size())){
+                counter1=0;
+                System.out.println();
+            }
+        }
+
+        return "Вы удачно загрузили файл";
     }
 
     @Transactional
@@ -131,23 +140,326 @@ public class ValueService {
 
     @Transactional
     private void calculate(){
+
+        boolean isOk = false; // понадобится в конце, чтобы определить нужна ли еще рекурсия
+
         List<Value> allValues = this.findAll();
-//        System.out.println("----");
-//        Collections.sort(allValues);
-//        for (Value v: allValues) {
-//            System.out.println(v.getValue() + " " + v.getVariants());
-//        }
-//        System.out.println("----");
-        //проверка по горизонтали, что нет повторений в значениях
+
+        int[][] valuesToDelete = calculatePart1(allValues);
+
+        calculatePart2(valuesToDelete, allValues);
+
+        isOk = calculatePart3(false, allValues);
+
+
+
+        // нашелся хотя бы один variants содержащий ровно одну цифру, которую подставили в итоговое значение -> пора пересчитывать рекурсивно
+        if (isOk) {
+            allValues = this.findAll();
+            Collections.sort(allValues);
+            int counter1=0;
+            System.out.println("---");
+            for (Value v: allValues) {
+                counter1++;
+                if (v.getValue()>0) System.out.print(v.getValue());
+                else System.out.print(".");
+                if (counter1==Math.sqrt(allValues.size())){
+                    counter1=0;
+                    System.out.println();
+                }
+            }
+//            Collections.sort(allValues);
+//            System.out.println("---");
+//            for (Value v: allValues) {
+//                System.out.println(v.getValue()+" "+v.getVariants());
+//            }
+            //System.out.println("Пошла рекурсия");
+            calculate(); // рекурсия, повторяем процедуру вычислений
+        }
+
+        // тут мы окажемся, только если или все решено, или остались variants, содержащие более 1 цифры, или не сходится пазл
+        Collections.sort(allValues);
+        isOk=true;
+        int counter1=0;
+        for (Value v: allValues) {
+                if (v.getValue()==0 && v.getVariants().isEmpty()) {isOk=true;counter1=1;break;} // получили не сходимость
+                if (v.getValue()==0 && v.getVariants().length()>1) {isOk=false;} // получили, что есть варианты с variants больше одной цифры
+        }
+
+        // точно есть еще неопределенные элементы, у котороых variants содержат более одной цифры (неоднозначность)
+       // начинает рекурсивно перебирать деревья вариантов
+        if (!isOk) {calculate3(allValues);}
+
+
+        if (isOk && counter1 ==1) System.out.println("Ошибка в данных файла, невозможно получить ответ");
+
+    }
+
+    private void calculate3(List<Value> allValues) {
+        //System.out.println("Все сложно, нет однозначности");
+        //найти variants с минимальным количеством цифры для оптимизации
+        int min = (int) Math.sqrt(allValues.size());
+        Collections.sort(allValues);
+        for (Value v: allValues) {
+            if (v.getValue()==0 && v.getVariants().length()<min) min = v.getVariants().length();
+        }
+
+        String baseValueOfThisVariants ="";
+        Value v1 = null;
+        Collections.sort(allValues);
+        int counter2 = 0;
+        List<Value> saveValues = new ArrayList<>();
+        for (Value v: allValues) {
+            Value v2 = new Value();
+            v2.setValue(v.getValue());
+            v2.setVariants(v.getVariants());
+            saveValues.add(v2);
+            if (v2.getVariants().length()==min && counter2==0){
+                baseValueOfThisVariants = v2.getVariants();
+                //System.out.println("baseValueOfThisVariants= " + baseValueOfThisVariants);
+                counter2=1;
+                v1=v;
+            }
+        }
+        //System.out.println("saveValues=" + saveValues.get(0).getValue());
+
+        // пробежаться в цикле - и подставлять одно значение за другим, пока не получим сходимость
+        for (char c: baseValueOfThisVariants.toCharArray()) {
+            calculate2(c, baseValueOfThisVariants, allValues, v1); // результат или все круто, или не получилось
+            counter2 = 0; // флажок, для определения - если есть сходимость, то выйти из цикла
+            allValues = this.findAll();
+            Collections.sort(allValues);
+
+            // тут могут быть два варианта или все сошлось или могут быть нули с соответствующими variants больше одной цифры
+            for (Value v : allValues) {
+                if (v.getValue() == 0) {
+                    counter2 = 1;
+                    break;
+                }
+
+            }
+            if (counter2 == 0) break; // все круто, нашлось решение
+            if (counter2 == 1) {
+                //тут мы на развилке - или ветка тупиковая или в ветке получись только нули с соответствующими variants больше одной цифры
+                counter2 = 0;
+                for (Value v : allValues) {
+                    if (v.getValue() == 0 && v.getVariants().isEmpty()) {
+                        counter2 = 1;
+                        break;
+                    }
+
+                }
+                if (counter2 == 0) calculate3(allValues); // вновь рекурсия, перебираем деревья
+                if (counter2 == 1) { // ветка тупиковая
+                    counter2 = 0;
+                    for (Value v : allValues) {
+                        v.setValue(saveValues.get(counter2).getValue());
+                        v.setVariants(saveValues.get(counter2).getVariants());
+                        counter2++;
+                    }
+                    //System.out.println("неудачная ветка2");
+
+                    //saveAll2(saveValues); // надо восстановить исходное состояние БД после всех изменений в calculate2 в другой транзакции
+                    //System.out.println("неудачная ветка3");
+                    //System.out.println("saveValues2=" + saveValues.get(0).getValue());
+                    allValues = this.findAll();
+                    Collections.sort(allValues);
+                    int counter1 = 0;
+                    //System.out.println("+++");
+//                    for (Value v : allValues) {
+//                        counter1++;
+//                        if (v.getValue() > 0) System.out.print(v.getValue());
+//                        else System.out.print(".");
+//                        if (counter1 == Math.sqrt(allValues.size())) {
+//                            counter1 = 0;
+//                            System.out.println();
+//                        }
+//                    }
+                    //baseValueOfThisVariants ="";
+                    v1 = null;
+
+                    for (Value v : allValues) {
+                        if (v.getVariants().length() == min) {
+                            //baseValueOfThisVariants = v.getVariants();
+                            v1 = v;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
+    private void cleanSector(int x,int y, int z, Value v, int[][] valuesToDelete){
+        int countOfSectorInLine = z / 3;
+        int numberOfSector = (x-1)/3 + (y-1)/3*countOfSectorInLine + 1;
+        for (int i = 1; i<z+1 ; i++) {
+            for (int j = 1; j<z+1; j++) {
+                if (numberOfSector==(i-1)/3 + (j-1)/3*countOfSectorInLine + 1) {
+                    v.setVariants(v.getVariants().replaceAll(String.valueOf(valuesToDelete[i-1][j-1]), ""));
+                    if (x==2 && y==1) {
+                        //System.out.println("numberofsector=" + numberOfSector);
+                        //System.out.println(valuesToDelete[i-1][j-1]);
+                    }
+                }
+            }
+        }
+    }
+
+    private void calculate2(char c, String baseValueOfThisVariants, List<Value>  allValues, Value value){
+        //Тут два состояния - или эту функцию вызвали из цикла for главной функции, или ее вызвали рекурсивно
+
+        if (c!='r') { // значит функцию вызвали из цикла for
+
+
+            boolean isOk = false; // понадобится в конце, чтобы определить нужна ли еще рекурсия
+
+            value.setValue(Integer.parseInt(String.valueOf(c)));
+            value.setVariants(value.getVariants().replaceAll(String.valueOf(c), ""));
+            this.save(value);
+            allValues = this.findAll();
+
+            int[][] valuesToDelete = calculatePart1(allValues);
+
+            calculatePart2(valuesToDelete, allValues);
+
+            isOk = calculatePart3(false, allValues);
+
+
+
+            // нашелся хотя бы один variants содержащий ровно одну цифру, которую подставили в итоговое значение -> пора пересчитывать рекурсивно
+            if (isOk) {
+                allValues = this.findAll();
+                Collections.sort(allValues);
+                int counter1=0;
+                System.out.println("---");
+                for (Value v: allValues) {
+                    counter1++;
+                    if (v.getValue()>0) System.out.print(v.getValue());
+                    else System.out.print(".");
+                    if (counter1==Math.sqrt(allValues.size())){
+                        counter1=0;
+                        System.out.println();
+                    }
+                }
+//            Collections.sort(allValues);
+//            System.out.println("---");
+//            for (Value v: allValues) {
+//                System.out.println(v.getValue()+" "+v.getVariants());
+//            }
+                //System.out.println("Пошла рекурсия2");
+                calculate2('r', "", null, null); // рекурсия, повторяем процедуру вычислений
+            }
+
+            // тут мы окажемся, только если или все решено, или остались variants, содержащие более 1 цифры, или не сходится пазл
+            allValues = this.findAll();
+            Collections.sort(allValues);
+            isOk=true;
+            int counter1=0;
+            for (Value v: allValues) {
+                if (v.getValue()==0 && v.getVariants().isEmpty()) {isOk=true;counter1=1;break;} // получили не сходимость
+                if (v.getValue()==0 && v.getVariants().length()>1) {isOk=false;} // получили, что есть варианты с variants больше одной цифры
+            }
+
+            // точно есть еще неопределенные элементы, у котороых variants содержат более одной цифры (неоднозначность), возвращаем БД в исходное состояние
+            if (!isOk) {
+               //this.saveAll(tempAllValues);
+                //System.out.println("получили, что есть толко варианты с variants больше одной цифры");
+            }
+
+            // неудачный вариант, возвращаем БД в исходное состояние
+            if (isOk && counter1 ==1) {
+                //System.out.println("Ошибка в данных файла, невозможно получить ответ2 (функцию вызвали из цикла for)");
+                //this.saveAll(tempAllValues);
+
+            }
+        }
+
+        if (c=='r'){ // значит это рекурсивный вызов
+
+            boolean isOk = false; // понадобится в конце, чтобы определить нужна ли еще рекурсия
+
+            //value.setValue(Integer.parseInt(String.valueOf(c)));
+            //value.setVariants(value.getVariants().replaceAll(String.valueOf(c), ""));
+            //this.save(value);
+            allValues = this.findAll();
+
+
+            Collections.sort(allValues);
+            //System.out.println("===");
+            //for (Value v: allValues) System.out.println(v.getValue()+" "+v.getVariants());
+
+            int[][] valuesToDelete = calculatePart1(allValues);
+
+            calculatePart2(valuesToDelete, allValues);
+
+            isOk = calculatePart3(false, allValues);
+
+
+
+            // нашелся хотя бы один variants содержащий ровно одну цифру, которую подставили в итоговое значение -> пора пересчитывать рекурсивно
+            if (isOk) {
+                allValues = this.findAll();
+                Collections.sort(allValues);
+                int counter1=0;
+                System.out.println("---");
+                for (Value v: allValues) {
+                    counter1++;
+                    if (v.getValue()>0) System.out.print(v.getValue());
+                    else System.out.print(".");
+                    if (counter1==Math.sqrt(allValues.size())){
+                        counter1=0;
+                        System.out.println();
+                    }
+                }
+//            Collections.sort(allValues);
+//            System.out.println("---");
+//            for (Value v: allValues) {
+//                System.out.println(v.getValue()+" "+v.getVariants());
+//            }
+                //System.out.println("Пошла рекурсия2");
+                calculate2('r', "", null, null); // рекурсия, повторяем процедуру вычислений
+            }
+
+            // тут мы окажемся, только если или все решено, или остались variants, содержащие более 1 цифры, или не сходится пазл
+            Collections.sort(allValues);
+            isOk=true;
+            int counter1=0;
+            for (Value v: allValues) {
+                if (v.getValue()==0 && v.getVariants().isEmpty()) {isOk=true;counter1=1;break;} // получили не сходимость
+                if (v.getValue()==0 && v.getVariants().length()>1) {isOk=false;} // получили, что есть варианты с variants больше одной цифры
+            }
+
+            // точно есть еще неопределенные элементы, у котороых variants содержат более одной цифры (неоднозначность), возвращаем БД в исходное состояние
+            if (!isOk) {
+               // this.saveAll(tempAllValues);
+                //System.out.println("получили, что есть толко варианты с variants больше одной цифры");
+            }
+
+            // неудачный вариант, возвращаем БД в исходное состояние
+            if (isOk && counter1 ==1) {
+                //System.out.println("Ошибка в данных файла, невозможно получить ответ2");
+               // this.saveAll(tempAllValues);
+            }
+        }
+
+    }
+
+    private int[][] calculatePart1(List<Value> allValues){
+
+
+
         int counter1 = 0;
         int counter2 = 0;
-        boolean isOk = false;
-        //int counter3 = -1;
-        //List<Value> inLineValues = new ArrayList<>();
+
+
+        // двумерный массив значений, которые надо вычищать из подходящих variants
         int[][] valuesToDelete = new int[(int)Math.sqrt(allValues.size())][(int)Math.sqrt(allValues.size())];
 
         // пробегаем по всем значениям из базы и собираем двумерный массив значений, которые надо вычистить из поля variants базы
         Collections.sort(allValues);
+        //System.out.println();
         for (Value v: allValues){
             counter1++;
             //if (counter1 == 1) System.out.println("---" + v.getValue() + "---");
@@ -169,10 +481,13 @@ public class ValueService {
             }
 
         }
+        return valuesToDelete;
+    }
 
-        counter1 = 0;
-        counter2 = 0;
-        // чистим поле variants у каждого значения
+    private void calculatePart2(int[][] valuesToDelete, List<Value> allValues) {
+        int counter1 = 0;
+        int counter2 = 0;
+        // чистим поле variants у каждого значения равного нулю (т.е. незивестное)
         Collections.sort(allValues);
         for (Value v: allValues){
             counter1++;
@@ -191,13 +506,19 @@ public class ValueService {
             this.save(v);
 
         }
+        //System.out.println("чистка variants прошла успешно");
+    }
 
+    private boolean calculatePart3(boolean isOk, List<Value> allValues){
         // Проверяем есть ли variants состоящие из одной цифры, если есть - то вставляем их в нулевые value
         Collections.sort(allValues);
         for (Value v: allValues) {
             if (v.getValue()==0) {
-                if (v.getVariants().isEmpty())
-                    System.out.println("Ошибка вычисления, некорректные данные в файле");
+                if (v.getVariants().isEmpty()) {
+                    //System.out.println("Ошибка вычисления, некорректные данные в файле");
+                    isOk = false;
+                    break;
+                }
                 if (v.getVariants().length() == 1) {
                     v.setValue(Integer.parseInt(v.getVariants()));
                     v.setVariants("");
@@ -208,45 +529,7 @@ public class ValueService {
 
             }
         }
-
-        if (isOk) {
-            Collections.sort(allValues);
-            counter1=0;
-            System.out.println("---");
-            for (Value v: allValues) {
-                counter1++;
-                if (v.getValue()>0) System.out.print(v.getValue());
-                else System.out.print(".");
-                if (counter1==Math.sqrt(allValues.size())){
-                    counter1=0;
-                    System.out.println();
-                }
-            }
-            Collections.sort(allValues);
-            System.out.println("---");
-            for (Value v: allValues) {
-                System.out.println(v.getValue()+" "+v.getVariants());
-            }
-            System.out.println("Пошла рекурсия");calculate(); // рекурсия, повторяем процедуру вычислений
-        }
-        //if (valueService.findByValue(0)!=null) System.out.println("Все сложно, нет однозначности");
+        return isOk;
     }
-
-    private void cleanSector(int x,int y, int z, Value v, int[][] valuesToDelete){
-        int countOfSectorInLine = z / 3;
-        int numberOfSector = (x-1)/3 + (y-1)/3*countOfSectorInLine + 1;
-        for (int i = 1; i<z+1 ; i++) {
-            for (int j = 1; j<z+1; j++) {
-                if (numberOfSector==(i-1)/3 + (j-1)/3*countOfSectorInLine + 1) {
-                    v.setVariants(v.getVariants().replaceAll(String.valueOf(valuesToDelete[i-1][j-1]), ""));
-                    if (x==2 && y==1) {
-                        //System.out.println("numberofsector=" + numberOfSector);
-                        //System.out.println(valuesToDelete[i-1][j-1]);
-                    }
-                }
-            }
-        }
-    }
-
 
 }

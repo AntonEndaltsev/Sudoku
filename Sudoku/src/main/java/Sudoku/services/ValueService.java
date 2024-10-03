@@ -441,9 +441,10 @@ public class ValueService {
                 for (int i = 0; i < valuesToDelete.length; i++) {
                     v.setVariants(v.getVariants().replaceAll(String.valueOf(valuesToDelete[counter2][i]), "")); // удаляем по горизонтали
                     v.setVariants(v.getVariants().replaceAll(String.valueOf(valuesToDelete[i][counter1 - 1]), "")); // удаляем по вертикали
-                    cleanSector(counter2+1, counter1, valuesToDelete.length, v, valuesToDelete); // удаляем пересекающиеся значения внутри сектора
 
                 }
+                cleanSector(counter2+1, counter1, valuesToDelete.length, v, valuesToDelete); // удаляем пересекающиеся значения внутри сектора
+
             }
             if (counter1==Math.sqrt(allValues.size())) {
                 counter2++;

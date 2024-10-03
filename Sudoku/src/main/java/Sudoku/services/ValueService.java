@@ -67,6 +67,10 @@ public class ValueService {
 
     @Transactional
     public String WorkWithFile(){
+
+        Date date = new Date();
+        long timeOfCalculate = date.getTime(); // зафиксировали время старта алгоритма
+
         String tempString;
         List<String> listString = new ArrayList<>();
         int length=0;
@@ -117,6 +121,11 @@ public class ValueService {
             }
         }
 
+        date = new Date();
+        timeOfCalculate = date.getTime() - timeOfCalculate; // вычисление потраченного времени
+        //System.out.println(timeOfCalculate);
+        response.append("Количество миллисекуд на вычисления: ");
+        response.append(timeOfCalculate);
         return response.toString();
     }
 
@@ -167,11 +176,13 @@ public class ValueService {
 
         for (Value v: allValues) {
                 if (v.getValue()==0 && v.getVariants().length()>1) {isOk=false;} // получили, что есть варианты с variants больше одной цифры
+            System.out.println(v.getValue()+" "+v.getVariants());
         }
 
         // точно есть еще неопределенные элементы, у котороых variants содержат более одной цифры (неоднозначность)
         // начинает рекурсивно перебирать деревья вариантов
-        if (!isOk) {calculate3(allValues);}
+        if (!isOk) {
+            System.out.println("Пошел перебор деревьев");calculate3(allValues);}
 
        // в итоге calculate или получит сходимость, или изначальные данные в файле не дают сходимость
 
@@ -207,24 +218,69 @@ public class ValueService {
         Value v1 = null; // объект будет хранить указатель на нужный объект, который мы перебираем
         Collections.sort(allValues);
         int counter2 = 0;
-        List<Value> saveValues = new ArrayList<>();
+        List<Value> saveValues2 = new ArrayList<>();
         for (Value v: allValues) {
-            Value v2 = new Value();
-            v2.setValue(v.getValue());
-            v2.setVariants(v.getVariants());
-            saveValues.add(v2);
-            if (v2.getVariants().length()==min && counter2==0){
-                baseValueOfThisVariants = v2.getVariants();
+            Value v3 = new Value();
+            v3.setValue(v.getValue());
+            v3.setVariants(v.getVariants());
+            saveValues2.add(v3);
+            if (v3.getVariants().length()==min && counter2==0){
+                baseValueOfThisVariants = v.getVariants();
                 //System.out.println("baseValueOfThisVariants= " + baseValueOfThisVariants);
                 counter2=1;
                 v1=v;
             }
         }
 
+//        //
+//        String baseValueOfThisVariants =""; // переменная сохранит variants с минимальным кол-вом цифр для перебора
+//        Value v1 = null; // объект будет хранить указатель на нужный объект, который мы перебираем
+//        Collections.sort(allValues);
+//        for (Value v: allValues) {
+//            if (v.getVariants().length()==min){
+//                baseValueOfThisVariants = v.getVariants();
+//                v1=v;
+//               break;
+//            }
+//        }
+
+
+
+
+
+        //System.out.println("base= " + baseValueOfThisVariants);
+
 
         // пробежаться в цикле - и подставлять одно значение за другим, пока не получим сходимость
         for (char c: baseValueOfThisVariants.toCharArray()) {
-            calculate2(c, baseValueOfThisVariants, allValues, v1); // вновь вложенная рекурсия просчета варианта (3 исхода: сходимость, неопределенность, несходимость)
+
+            int counter3=0;
+            for (Value v : allValues) {
+                if (v.getValue() == 0) {
+                    counter3 = 1;  // тут могут быть два варианта или все сошлось или могут быть нули с соответствующими variants больше одной цифры
+                    break;
+                }
+            }
+            if (counter3==0) break; // мы нашли решение, нам больше не нужно проходить циклы и рекурсии
+
+            //постоянно возвращаем старые данные при каждой итерации
+            v1=null;
+            counter2 = 0;
+            int counter1 = 0;
+
+            for (Value v : allValues) {
+                v.setValue(saveValues2.get(counter2).getValue());
+                v.setVariants(saveValues2.get(counter2).getVariants());
+                counter2++;
+                if (v.getVariants().length()==min && counter1==0){
+                    baseValueOfThisVariants = v.getVariants();
+                    //System.out.println("baseValueOfThisVariants= " + baseValueOfThisVariants);
+                    counter1=1;
+                    v1=v;
+                }
+            }
+
+            List<Value> saveValues = calculate2(c, baseValueOfThisVariants, allValues, v1); // вновь вложенная рекурсия просчета варианта (3 исхода: сходимость, неопределенность, несходимость)
 
             counter2 = 0; // флажок, для определения - если есть сходимость, то выйти из цикла
             allValues = this.findAll();
@@ -253,23 +309,25 @@ public class ValueService {
 
                 if (counter2 == 1) { // ветка тупиковая, пора вернуть все исходные значения
 
-                    counter2 = 0;
-                    for (Value v : allValues) {
-                        v.setValue(saveValues.get(counter2).getValue());
-                        v.setVariants(saveValues.get(counter2).getVariants());
-                        counter2++;
-                    }
-
-                    v1 = null;
-                    for (Value v : allValues) {
-                        if (v.getVariants().length() == min) {
-                            //baseValueOfThisVariants = v.getVariants();
-                            v1 = v; // вновь возвращаем указатель на нужый нам объект для перебора, т.к. он мог измениться
-                            break;
-                        }
-                    }
+//                    counter2 = 0;
+//                    for (Value v : allValues) {
+//                        v.setValue(saveValues.get(counter2).getValue());
+//                        v.setVariants(saveValues.get(counter2).getVariants());
+//                        counter2++;
+//                    }
+//
+//                    v1 = null;
+//                    for (Value v : allValues) {
+//                        if (v.getVariants().length() == min) {
+//                            //baseValueOfThisVariants = v.getVariants();
+//                            v1 = v; // вновь возвращаем указатель на нужый нам объект для перебора, т.к. он мог измениться
+//                            break;
+//                        }
+//                    }
                 }
             }
+
+
         }
     }
 
@@ -290,32 +348,47 @@ public class ValueService {
         }
     }
 
-    private void calculate2(char c, String baseValueOfThisVariants, List<Value>  allValues, Value value){
+    private List<Value> calculate2(char c, String baseValueOfThisVariants, List<Value>  allValues, Value value){
         //Тут два состояния - или эту функцию вызвали из цикла for главной функции, или ее вызвали рекурсивно
+        List<Value> saveValues = new ArrayList<>();
 
         boolean isOk = false; // понадобится в конце, чтобы определить нужна ли еще рекурсия
 
         if (c!='r') { // значит функцию вызвали из цикла for
+//            //надо сохранить БД
+//            for (Value v: allValues) {
+//                Value v2 = new Value();
+//                v2.setValue(v.getValue());
+//                v2.setVariants(v.getVariants());
+//                saveValues.add(v2);
+//            }
             // единственное отличие откуда вызвана функция. В данном случае надо вставить значение из перебираемого variants
             value.setValue(Integer.parseInt(String.valueOf(c)));
             value.setVariants(value.getVariants().replaceAll(String.valueOf(c), ""));
             this.save(value);
-            allValues = this.findAll();
+
+
+
+
+
         }
 
+        allValues = this.findAll();
         int[][] valuesToDelete = calculatePart1(allValues);
         calculatePart2(valuesToDelete, allValues);
         isOk = calculatePart3(false, allValues);
 
+        //if (!isOk) for (Value v: allValues) System.out.println(v.getValue()+ " "+v.getVariants());
+
         // нашелся хотя бы один variants содержащий ровно одну цифру, которую подставили в итоговое значение -> пора пересчитывать рекурсивно
         if (isOk) {
                 printIterationSudoku(); // печатаем очередной просчитываемый вариант Sudoku
-                calculate2('r', "", null, null); // рекурсия, повторяем процедуру вычислений
+                List<Value> tempValues = calculate2('r', "", null, null); // рекурсия, повторяем процедуру вычислений
             }
 
             // тут мы окажемся, только если или все решено, или остались variants, содержащие более 1 цифры, или не сходится пазл
             // в итоге функция calculate2 перестает себя вызывать, когда или получилась сходимость, или получилась неоднозначность, или получилась не сходимость
-
+        return saveValues;
 
     }
 

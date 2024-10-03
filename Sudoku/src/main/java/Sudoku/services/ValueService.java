@@ -102,19 +102,22 @@ public class ValueService {
         //основные вычисления через рекурсию
         calculate();
 
+        // два варианта - или сходимость и надо вывести ответ или некорректные данные в файле - несходимость
+        StringBuilder response = new StringBuilder("Файл загружен успешно. Решение найдено:\n");
         List<Value> allValues = this.findAll();
         Collections.sort(allValues);
         int counter1 = 0;
         for (Value v:allValues) {
-            System.out.print(v.getValue());
+            response.append(v.getValue());
+            if (v.getValue()==0) {return "Файл загружен. Но решение невозможно получить, некорректные данные в файле";}
             counter1++;
             if (counter1==Math.sqrt(allValues.size())){
                 counter1=0;
-                System.out.println();
+                response.append("\n");
             }
         }
 
-        return "Вы удачно загрузили файл";
+        return response.toString();
     }
 
     @Transactional
@@ -145,67 +148,63 @@ public class ValueService {
 
         List<Value> allValues = this.findAll();
 
-        int[][] valuesToDelete = calculatePart1(allValues);
+        int[][] valuesToDelete = calculatePart1(allValues); // создаем двумерный массив значений, которые надо вычистить из подходящих variants
 
-        calculatePart2(valuesToDelete, allValues);
+        calculatePart2(valuesToDelete, allValues); // чистим variants по горизонтали, вертикали и в секторе на основе двумерного массива
 
-        isOk = calculatePart3(false, allValues);
-
-
+        isOk = calculatePart3(false, allValues); // если у нулевого (неизвестного) значения есть variants, содержащий только одну цифру, то вставляем в значение.
+        // если  у нулевого (неизвестного) значения есть пустой variants - значит получили несходимость
 
         // нашелся хотя бы один variants содержащий ровно одну цифру, которую подставили в итоговое значение -> пора пересчитывать рекурсивно
         if (isOk) {
-            allValues = this.findAll();
-            Collections.sort(allValues);
-            int counter1=0;
-            System.out.println("---");
-            for (Value v: allValues) {
-                counter1++;
-                if (v.getValue()>0) System.out.print(v.getValue());
-                else System.out.print(".");
-                if (counter1==Math.sqrt(allValues.size())){
-                    counter1=0;
-                    System.out.println();
-                }
-            }
-//            Collections.sort(allValues);
-//            System.out.println("---");
-//            for (Value v: allValues) {
-//                System.out.println(v.getValue()+" "+v.getVariants());
-//            }
-            //System.out.println("Пошла рекурсия");
+            printIterationSudoku(); // печатаем очередной просчитываемый вариант Sudoku
             calculate(); // рекурсия, повторяем процедуру вычислений
         }
 
         // тут мы окажемся, только если или все решено, или остались variants, содержащие более 1 цифры, или не сходится пазл
         Collections.sort(allValues);
         isOk=true;
-        int counter1=0;
+
         for (Value v: allValues) {
-                if (v.getValue()==0 && v.getVariants().isEmpty()) {isOk=true;counter1=1;break;} // получили не сходимость
                 if (v.getValue()==0 && v.getVariants().length()>1) {isOk=false;} // получили, что есть варианты с variants больше одной цифры
         }
 
         // точно есть еще неопределенные элементы, у котороых variants содержат более одной цифры (неоднозначность)
-       // начинает рекурсивно перебирать деревья вариантов
+        // начинает рекурсивно перебирать деревья вариантов
         if (!isOk) {calculate3(allValues);}
 
-
-        if (isOk && counter1 ==1) System.out.println("Ошибка в данных файла, невозможно получить ответ");
+       // в итоге calculate или получит сходимость, или изначальные данные в файле не дают сходимость
 
     }
 
-    private void calculate3(List<Value> allValues) {
-        //System.out.println("Все сложно, нет однозначности");
-        //найти variants с минимальным количеством цифры для оптимизации
+    private void printIterationSudoku(){
+        List<Value> allValues = this.findAll();
+        Collections.sort(allValues);
+        int counter1=0;
+        System.out.println("---");
+        for (Value v: allValues) {
+            counter1++;
+            if (v.getValue()>0) System.out.print(v.getValue());
+            else System.out.print(".");
+            if (counter1==Math.sqrt(allValues.size())){
+                counter1=0;
+                System.out.println();
+            }
+        }
+    }
+
+    private void calculate3(List<Value> allValues) { // сюда попадаем только если остались неизвестные значения с variants, содержащим более 1 цифры
+
+        //найти variants с минимальным количеством цифр для оптимизации
         int min = (int) Math.sqrt(allValues.size());
         Collections.sort(allValues);
         for (Value v: allValues) {
             if (v.getValue()==0 && v.getVariants().length()<min) min = v.getVariants().length();
         }
 
-        String baseValueOfThisVariants ="";
-        Value v1 = null;
+        // сохраняем слепок изначальной матрицы Sudoku, т.к. дальше начнем ее изменять перебирая варианты
+        String baseValueOfThisVariants =""; // переменная сохранит variants с минимальным кол-вом цифр для перебора
+        Value v1 = null; // объект будет хранить указатель на нужный объект, который мы перебираем
         Collections.sort(allValues);
         int counter2 = 0;
         List<Value> saveValues = new ArrayList<>();
@@ -221,24 +220,24 @@ public class ValueService {
                 v1=v;
             }
         }
-        //System.out.println("saveValues=" + saveValues.get(0).getValue());
+
 
         // пробежаться в цикле - и подставлять одно значение за другим, пока не получим сходимость
         for (char c: baseValueOfThisVariants.toCharArray()) {
-            calculate2(c, baseValueOfThisVariants, allValues, v1); // результат или все круто, или не получилось
+            calculate2(c, baseValueOfThisVariants, allValues, v1); // вновь вложенная рекурсия просчета варианта (3 исхода: сходимость, неопределенность, несходимость)
+
             counter2 = 0; // флажок, для определения - если есть сходимость, то выйти из цикла
             allValues = this.findAll();
             Collections.sort(allValues);
-
-            // тут могут быть два варианта или все сошлось или могут быть нули с соответствующими variants больше одной цифры
             for (Value v : allValues) {
                 if (v.getValue() == 0) {
-                    counter2 = 1;
+                    counter2 = 1;  // тут могут быть два варианта или все сошлось или могут быть нули с соответствующими variants больше одной цифры
                     break;
                 }
-
             }
+
             if (counter2 == 0) break; // все круто, нашлось решение
+
             if (counter2 == 1) {
                 //тут мы на развилке - или ветка тупиковая или в ветке получись только нули с соответствующими variants больше одной цифры
                 counter2 = 0;
@@ -249,39 +248,23 @@ public class ValueService {
                     }
 
                 }
-                if (counter2 == 0) calculate3(allValues); // вновь рекурсия, перебираем деревья
-                if (counter2 == 1) { // ветка тупиковая
+
+                if (counter2 == 0) calculate3(allValues); // вновь рекурсия, требующая сделать слепок и  перебирать деревья
+
+                if (counter2 == 1) { // ветка тупиковая, пора вернуть все исходные значения
+
                     counter2 = 0;
                     for (Value v : allValues) {
                         v.setValue(saveValues.get(counter2).getValue());
                         v.setVariants(saveValues.get(counter2).getVariants());
                         counter2++;
                     }
-                    //System.out.println("неудачная ветка2");
 
-                    //saveAll2(saveValues); // надо восстановить исходное состояние БД после всех изменений в calculate2 в другой транзакции
-                    //System.out.println("неудачная ветка3");
-                    //System.out.println("saveValues2=" + saveValues.get(0).getValue());
-                    allValues = this.findAll();
-                    Collections.sort(allValues);
-                    int counter1 = 0;
-                    //System.out.println("+++");
-//                    for (Value v : allValues) {
-//                        counter1++;
-//                        if (v.getValue() > 0) System.out.print(v.getValue());
-//                        else System.out.print(".");
-//                        if (counter1 == Math.sqrt(allValues.size())) {
-//                            counter1 = 0;
-//                            System.out.println();
-//                        }
-//                    }
-                    //baseValueOfThisVariants ="";
                     v1 = null;
-
                     for (Value v : allValues) {
                         if (v.getVariants().length() == min) {
                             //baseValueOfThisVariants = v.getVariants();
-                            v1 = v;
+                            v1 = v; // вновь возвращаем указатель на нужый нам объект для перебора, т.к. он мог измениться
                             break;
                         }
                     }
@@ -310,139 +293,29 @@ public class ValueService {
     private void calculate2(char c, String baseValueOfThisVariants, List<Value>  allValues, Value value){
         //Тут два состояния - или эту функцию вызвали из цикла for главной функции, или ее вызвали рекурсивно
 
+        boolean isOk = false; // понадобится в конце, чтобы определить нужна ли еще рекурсия
+
         if (c!='r') { // значит функцию вызвали из цикла for
-
-
-            boolean isOk = false; // понадобится в конце, чтобы определить нужна ли еще рекурсия
-
+            // единственное отличие откуда вызвана функция. В данном случае надо вставить значение из перебираемого variants
             value.setValue(Integer.parseInt(String.valueOf(c)));
             value.setVariants(value.getVariants().replaceAll(String.valueOf(c), ""));
             this.save(value);
             allValues = this.findAll();
+        }
 
-            int[][] valuesToDelete = calculatePart1(allValues);
+        int[][] valuesToDelete = calculatePart1(allValues);
+        calculatePart2(valuesToDelete, allValues);
+        isOk = calculatePart3(false, allValues);
 
-            calculatePart2(valuesToDelete, allValues);
-
-            isOk = calculatePart3(false, allValues);
-
-
-
-            // нашелся хотя бы один variants содержащий ровно одну цифру, которую подставили в итоговое значение -> пора пересчитывать рекурсивно
-            if (isOk) {
-                allValues = this.findAll();
-                Collections.sort(allValues);
-                int counter1=0;
-                System.out.println("---");
-                for (Value v: allValues) {
-                    counter1++;
-                    if (v.getValue()>0) System.out.print(v.getValue());
-                    else System.out.print(".");
-                    if (counter1==Math.sqrt(allValues.size())){
-                        counter1=0;
-                        System.out.println();
-                    }
-                }
-//            Collections.sort(allValues);
-//            System.out.println("---");
-//            for (Value v: allValues) {
-//                System.out.println(v.getValue()+" "+v.getVariants());
-//            }
-                //System.out.println("Пошла рекурсия2");
+        // нашелся хотя бы один variants содержащий ровно одну цифру, которую подставили в итоговое значение -> пора пересчитывать рекурсивно
+        if (isOk) {
+                printIterationSudoku(); // печатаем очередной просчитываемый вариант Sudoku
                 calculate2('r', "", null, null); // рекурсия, повторяем процедуру вычислений
             }
 
             // тут мы окажемся, только если или все решено, или остались variants, содержащие более 1 цифры, или не сходится пазл
-            allValues = this.findAll();
-            Collections.sort(allValues);
-            isOk=true;
-            int counter1=0;
-            for (Value v: allValues) {
-                if (v.getValue()==0 && v.getVariants().isEmpty()) {isOk=true;counter1=1;break;} // получили не сходимость
-                if (v.getValue()==0 && v.getVariants().length()>1) {isOk=false;} // получили, что есть варианты с variants больше одной цифры
-            }
+            // в итоге функция calculate2 перестает себя вызывать, когда или получилась сходимость, или получилась неоднозначность, или получилась не сходимость
 
-            // точно есть еще неопределенные элементы, у котороых variants содержат более одной цифры (неоднозначность), возвращаем БД в исходное состояние
-            if (!isOk) {
-               //this.saveAll(tempAllValues);
-                //System.out.println("получили, что есть толко варианты с variants больше одной цифры");
-            }
-
-            // неудачный вариант, возвращаем БД в исходное состояние
-            if (isOk && counter1 ==1) {
-                //System.out.println("Ошибка в данных файла, невозможно получить ответ2 (функцию вызвали из цикла for)");
-                //this.saveAll(tempAllValues);
-
-            }
-        }
-
-        if (c=='r'){ // значит это рекурсивный вызов
-
-            boolean isOk = false; // понадобится в конце, чтобы определить нужна ли еще рекурсия
-
-            //value.setValue(Integer.parseInt(String.valueOf(c)));
-            //value.setVariants(value.getVariants().replaceAll(String.valueOf(c), ""));
-            //this.save(value);
-            allValues = this.findAll();
-
-
-            Collections.sort(allValues);
-            //System.out.println("===");
-            //for (Value v: allValues) System.out.println(v.getValue()+" "+v.getVariants());
-
-            int[][] valuesToDelete = calculatePart1(allValues);
-
-            calculatePart2(valuesToDelete, allValues);
-
-            isOk = calculatePart3(false, allValues);
-
-
-
-            // нашелся хотя бы один variants содержащий ровно одну цифру, которую подставили в итоговое значение -> пора пересчитывать рекурсивно
-            if (isOk) {
-                allValues = this.findAll();
-                Collections.sort(allValues);
-                int counter1=0;
-                System.out.println("---");
-                for (Value v: allValues) {
-                    counter1++;
-                    if (v.getValue()>0) System.out.print(v.getValue());
-                    else System.out.print(".");
-                    if (counter1==Math.sqrt(allValues.size())){
-                        counter1=0;
-                        System.out.println();
-                    }
-                }
-//            Collections.sort(allValues);
-//            System.out.println("---");
-//            for (Value v: allValues) {
-//                System.out.println(v.getValue()+" "+v.getVariants());
-//            }
-                //System.out.println("Пошла рекурсия2");
-                calculate2('r', "", null, null); // рекурсия, повторяем процедуру вычислений
-            }
-
-            // тут мы окажемся, только если или все решено, или остались variants, содержащие более 1 цифры, или не сходится пазл
-            Collections.sort(allValues);
-            isOk=true;
-            int counter1=0;
-            for (Value v: allValues) {
-                if (v.getValue()==0 && v.getVariants().isEmpty()) {isOk=true;counter1=1;break;} // получили не сходимость
-                if (v.getValue()==0 && v.getVariants().length()>1) {isOk=false;} // получили, что есть варианты с variants больше одной цифры
-            }
-
-            // точно есть еще неопределенные элементы, у котороых variants содержат более одной цифры (неоднозначность), возвращаем БД в исходное состояние
-            if (!isOk) {
-               // this.saveAll(tempAllValues);
-                //System.out.println("получили, что есть толко варианты с variants больше одной цифры");
-            }
-
-            // неудачный вариант, возвращаем БД в исходное состояние
-            if (isOk && counter1 ==1) {
-                //System.out.println("Ошибка в данных файла, невозможно получить ответ2");
-               // this.saveAll(tempAllValues);
-            }
-        }
 
     }
 
